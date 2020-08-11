@@ -2,6 +2,10 @@
 
 
 #include "PawnBase.h"
+#include "Components/CapsuleComponent.h"
+#include "ToonTanks/Actors/ProjectileBase.h"
+#include "ToonTanks/Components/HealthComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 // Sets default values
 APawnBase::APawnBase()
@@ -9,26 +13,45 @@ APawnBase::APawnBase()
  	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
+	CapsuleComp = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Capsule Collider"));
+	RootComponent = CapsuleComp;
+
+	BaseMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Base Mesh"));
+	BaseMesh->SetupAttachment(RootComponent);
+
+	TurretMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Turret Mesh"));
+	TurretMesh->SetupAttachment(BaseMesh);
+
+	ProjectileSpawnPoint = CreateDefaultSubobject<USceneComponent>(TEXT("Projectile Spawn Point"));
+	ProjectileSpawnPoint->SetupAttachment(TurretMesh);
+
+	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("Health Component"));
 }
 
-// Called when the game starts or when spawned
-void APawnBase::BeginPlay()
+void APawnBase::RotateTurret(FVector LookAtTarget) 
 {
-	Super::BeginPlay();
-	
+	FVector LookAtTargetCleaned = FVector(LookAtTarget.X, LookAtTarget.Y, TurretMesh->GetComponentLocation().Z);
+	FVector StartLocation = TurretMesh->GetComponentLocation();
+	FRotator TurretRotation = FVector(LookAtTargetCleaned - StartLocation).Rotation();
+
+	TurretMesh->SetWorldRotation(TurretRotation);
 }
 
-// Called every frame
-void APawnBase::Tick(float DeltaTime)
+void APawnBase::Fire() 
 {
-	Super::Tick(DeltaTime);
-
+	if (ProjectileClass) 
+	{
+		FVector SpawnLocation = ProjectileSpawnPoint->GetComponentLocation();
+		FRotator SpawnRotation =  ProjectileSpawnPoint->GetComponentRotation();
+		AProjectileBase* TempProjectile = GetWorld()->SpawnActor<AProjectileBase>(ProjectileClass, SpawnLocation, SpawnRotation);
+		TempProjectile->SetOwner(this);
+	}
 }
 
-// Called to bind functionality to input
-void APawnBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+void APawnBase::HandleDestruction() 
 {
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
+	UGameplayStatics::SpawnEmitterAtLocation(this, DeathParticle, GetActorLocation());
+	UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
+	GetWorld()->GetFirstPlayerController()->ClientPlayCameraShake(DeathShake);
 }
 
